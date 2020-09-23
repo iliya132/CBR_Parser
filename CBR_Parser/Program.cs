@@ -1,24 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net;
-using System.Net.Http;
-using System.Net.Sockets;
 using System.Text;
 using System.Xml;
-using System.Xml.Serialization;
 
 namespace CBR_Parser
 {
     class Program
     {
         private const string ApiUrl = @"http://www.cbr.ru/DailyInfoWebServ/DailyInfo.asmx";
-        private static DateTime reqDate = DateTime.Today.AddDays(1);
-        static void Main(string[] args)
+        private static readonly DateTime reqDate = DateTime.Today.AddDays(1);
+
+        static void Main()
         {
-            
+
             #region Initialize
             XmlDocument xmlDocument = new XmlDocument();
             try
@@ -61,12 +58,12 @@ namespace CBR_Parser
                     string date1 = reqDate.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
                     fileWriter.Write($"{cur.VchCode},");
                     fileWriter.Write($"{cur.Nominal},");
-                    fileWriter.Write($"{cur.Curs.Replace(',','.')},");
+                    fileWriter.Write($"{cur.Curs.Replace(',', '.')},");
                     fileWriter.Write($"{date1},");
                     fileWriter.Write($"{date},");
                     fileWriter.Write($"{DateTime.Now.TimeOfDay:hh\\:mm\\:ss}\r\n", CultureInfo.InvariantCulture);
                 }
-                foreach(MetalCurs met in metals)
+                foreach (MetalCurs met in metals)
                 {
                     string date = reqDate.AddDays(-1).ToString("M/d/yyyy", CultureInfo.InvariantCulture);
                     string date1 = reqDate.ToString("MM/d/yyyy", CultureInfo.InvariantCulture);
@@ -89,8 +86,10 @@ namespace CBR_Parser
                     string date1 = reqDate.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
                     fileWriter.Write($"{reutCurrency.ISOCode},");
                     fileWriter.Write($"{reutCurrency.Price},");
+                    fileWriter.Write($"{reutCurrency.Price},");
                     fileWriter.Write($"{DateTime.Now.TimeOfDay:hh\\:mm\\:ss},", CultureInfo.InvariantCulture);
-                    fileWriter.Write($"{date1}\r\n");
+                    fileWriter.Write($"{date1},");
+                    fileWriter.Write($"{reutCurrency.Name}\r\n");
                 }
             }
             #endregion
@@ -152,6 +151,7 @@ namespace CBR_Parser
             newStream.Write(CursBytes, 0, CursBytes.Length);
             newStream.Close();
             #endregion
+
             HttpWebResponse response;
 
             #region get response
@@ -231,25 +231,39 @@ namespace CBR_Parser
             XmlNode rs = document.ChildNodes[1].FirstChild.FirstChild.FirstChild.FirstChild;
             foreach (XmlNode node in rs.ChildNodes)
             {
-                ReuterCurrency metal = new ReuterCurrency();
+                ReuterCurrency reuterCur = new ReuterCurrency();
                 foreach (XmlNode childNode in node)
                 {
                     switch (childNode.Name)
                     {
                         case ("num_code"):
                             int code = Convert.ToInt32(childNode.InnerText.Trim());
-                            metal.Code = code.ToString("000");
+                            reuterCur.Code = code.ToString("000");
                             break;
                         case ("val"):
-                            metal.Price = childNode.InnerText.Trim();
+                            reuterCur.Price = childNode.InnerText.Trim();
                             break;
                         case ("dir"):
-                            metal.Dir = childNode.InnerText.Trim();
+                            reuterCur.Dir = childNode.InnerText.Trim();
                             break;
                     }
                 }
-                reuterCurrencies.Add(metal);
+                reuterCurrencies.Add(reuterCur);
             }
+            ReuterCurrency eur = new ReuterCurrency
+            {
+                Code = "978",
+                Dir = "0",
+                Price = "1"
+            };
+            ReuterCurrency usd = new ReuterCurrency
+            {
+                Code = "840",
+                Dir = "0",
+                Price = "1"
+            };
+            reuterCurrencies.Add(eur);
+            reuterCurrencies.Add(usd);
             return reuterCurrencies;
         }
     }
