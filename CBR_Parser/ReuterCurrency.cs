@@ -119,6 +119,7 @@ namespace CBR_Parser
             {"807", "MKD"},
             {"818", "EGP"},
             {"834", "TZS"},
+            {"840", "USD"},
             {"858", "UYU"},
             {"886", "YER"},
             {"901", "TWD"},
@@ -139,6 +140,7 @@ namespace CBR_Parser
             {"973", "AOA"},
             {"976", "CDF"},
             {"977", "BAM"},
+            {"978", "EUR"},
             {"981", "GEL"}
         };
         public static Dictionary<string, string> Names = new Dictionary<string, string>
