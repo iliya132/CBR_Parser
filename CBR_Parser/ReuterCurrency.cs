@@ -14,14 +14,28 @@ namespace CBR_Parser
         {
             get
             {
-                return CurrencyCodes[Code];
+                if (CurrencyCodes.ContainsKey(Code))
+                {
+                    return CurrencyCodes[Code];
+                }
+                else
+                {
+                    return string.Empty;
+                }
             }
         }
         public string Name
         {
             get
             {
-                return Names[ISOCode];
+                if (Names.ContainsKey(ISOCode))
+                {
+                    return Names[ISOCode];
+                }
+                else
+                {
+                    return string.Empty;
+                }
             }
         }
 
@@ -180,7 +194,7 @@ namespace CBR_Parser
             {"FJD", "Fiji Dollar"},
             {"DJF", "Dijibouti Franc"},
             {"GMD", "Gambian Dalasi"},
-            {"USD", "Gibraltar Pound"},
+            {"USD", "United States Dollar"},
             {"GTQ", "Guatemala Quetzal"},
             {"GNF", "Guinea Franc"},
             {"GYD", "Guyana Dollar"},

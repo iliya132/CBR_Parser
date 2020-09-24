@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Xml;
 
 namespace CBR_Parser
@@ -15,34 +16,12 @@ namespace CBR_Parser
 
         static void Main()
         {
-
-            #region Initialize
-            XmlDocument xmlDocument = new XmlDocument();
-            try
-            {
-                xmlDocument.Load(ApiUrl + "?WSDL");
-            }
-            catch (WebException e)
-            {
-                Console.WriteLine("Ошибка соединения. Описание:");
-                Console.WriteLine(e.Message);
-                Console.WriteLine("Убедитесь что у Вас включен LocalProxy");
-                Console.WriteLine("Press any key to quit");
-                Console.ReadKey();
-                return;
-            }
-            StringBuilder cursOnDateSoap = GenerateCursOnDateSoap();
-            StringBuilder MetalSoap = GenerateMetalSoap();
-            StringBuilder ReutersSoap = GenerateReutersSoap();
-            #endregion
-
-            XmlDocument CurrenciesDoc = GetDocument(cursOnDateSoap.ToString());
-            XmlDocument MetalDoc = GetDocument(MetalSoap.ToString());
-            XmlDocument ReutersDoc = GetDocument(ReutersSoap.ToString());
-
-            List<Currency> currencies = ExtractCurrencies(CurrenciesDoc);
-            List<MetalCurs> metals = ExtractMetalCurs(MetalDoc);
-            List<ReuterCurrency> reuterCurrencies = ExtractReutersCurs(ReutersDoc);
+            List<Currency> currencies = ExtractCurrencies();
+            if (currencies == null) return;
+            List<MetalCurs> metals = ExtractMetalCurs();
+            if (metals == null) return;
+            List<ReuterCurrency> reuterCurrencies = ExtractReutersCurs();
+            if (reuterCurrencies == null) return;
 
             #region write CBR.csv
             if (!Directory.Exists("Reports\\"))
@@ -54,25 +33,11 @@ namespace CBR_Parser
             {
                 foreach (Currency cur in currencies)
                 {
-                    string date = reqDate.AddDays(-1).ToString("M/d/yyyy", CultureInfo.InvariantCulture);
-                    string date1 = reqDate.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
-                    fileWriter.Write($"{cur.VchCode},");
-                    fileWriter.Write($"{cur.Nominal},");
-                    fileWriter.Write($"{cur.Curs.Replace(',', '.')},");
-                    fileWriter.Write($"{date1},");
-                    fileWriter.Write($"{date},");
-                    fileWriter.Write($"{DateTime.Now.TimeOfDay:hh\\:mm\\:ss}\r\n", CultureInfo.InvariantCulture);
+                    Write(fileWriter, cur);
                 }
                 foreach (MetalCurs met in metals)
                 {
-                    string date = reqDate.AddDays(-1).ToString("M/d/yyyy", CultureInfo.InvariantCulture);
-                    string date1 = reqDate.ToString("MM/d/yyyy", CultureInfo.InvariantCulture);
-                    fileWriter.Write($"{met.ISOCode},");
-                    fileWriter.Write($"1,");
-                    fileWriter.Write($"{met.Price.Replace(',', '.')},");
-                    fileWriter.Write($"{date1},");
-                    fileWriter.Write($"{date},");
-                    fileWriter.Write($"{DateTime.Now.TimeOfDay:hh\\:mm\\:ss}\r\n", CultureInfo.InvariantCulture);
+                    Write(fileWriter, met);
                 }
             }
             #endregion
@@ -83,16 +48,48 @@ namespace CBR_Parser
             {
                 foreach (ReuterCurrency reutCurrency in reuterCurrencies)
                 {
-                    string date1 = reqDate.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
-                    fileWriter.Write($"{reutCurrency.ISOCode},");
-                    fileWriter.Write($"{reutCurrency.Price},");
-                    fileWriter.Write($"{reutCurrency.Price},");
-                    fileWriter.Write($"{DateTime.Now.TimeOfDay:hh\\:mm\\:ss},", CultureInfo.InvariantCulture);
-                    fileWriter.Write($"{date1},");
-                    fileWriter.Write($"{reutCurrency.Name}\r\n");
+                    Write(fileWriter, reutCurrency);
                 }
             }
             #endregion
+        }
+
+        private static void Write(StreamWriter fileWriter, ReuterCurrency reutCurrency)
+        {
+            if (!string.IsNullOrEmpty(reutCurrency.ISOCode) && !string.IsNullOrEmpty(reutCurrency.Name))
+            {
+                string date1 = reqDate.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
+                fileWriter.Write($"{reutCurrency.ISOCode},");
+                fileWriter.Write($"{reutCurrency.Price},");
+                fileWriter.Write($"{reutCurrency.Price},");
+                fileWriter.Write($"{DateTime.Now.TimeOfDay:hh\\:mm\\:ss},", CultureInfo.InvariantCulture);
+                fileWriter.Write($"{date1},");
+                fileWriter.Write($"{reutCurrency.Name}\r\n");
+            }
+        }
+
+        private static void Write (StreamWriter writer, Currency currency)
+        {
+            string date = reqDate.AddDays(-1).ToString("M/d/yyyy", CultureInfo.InvariantCulture);
+            string date1 = reqDate.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
+            writer.Write($"{currency.VchCode},");
+            writer.Write($"{currency.Nominal},");
+            writer.Write($"{currency.Curs.Replace(',', '.')},");
+            writer.Write($"{date1},");
+            writer.Write($"{date},");
+            writer.Write($"{DateTime.Now.TimeOfDay:hh\\:mm\\:ss}\r\n", CultureInfo.InvariantCulture);
+        }
+
+        private static void Write(StreamWriter writer, MetalCurs metal)
+        {
+            string date = reqDate.AddDays(-1).ToString("M/d/yyyy", CultureInfo.InvariantCulture);
+            string date1 = reqDate.ToString("MM/d/yyyy", CultureInfo.InvariantCulture);
+            writer.Write($"{metal.ISOCode},");
+            writer.Write($"1,");
+            writer.Write($"{metal.Price.Replace(',', '.')},");
+            writer.Write($"{date1},");
+            writer.Write($"{date},");
+            writer.Write($"{DateTime.Now.TimeOfDay:hh\\:mm\\:ss}\r\n", CultureInfo.InvariantCulture);
         }
 
         private static StringBuilder GenerateReutersSoap()
@@ -140,31 +137,48 @@ namespace CBR_Parser
 
         private static XmlDocument GetDocument(string message)
         {
-            #region request
-            WebRequest CursRequest = (HttpWebRequest)WebRequest.Create(ApiUrl);
-            CursRequest.ContentType = @"text/xml";
-            CursRequest.Method = "POST";
+            try
+            {
+                #region request
+                WebRequest CursRequest = (HttpWebRequest)WebRequest.Create(ApiUrl);
+                CursRequest.ContentType = @"text/xml";
+                CursRequest.Method = "POST";
 
-            UTF8Encoding encoding = new UTF8Encoding();
-            byte[] CursBytes = encoding.GetBytes(message);
-            Stream newStream = CursRequest.GetRequestStream();
-            newStream.Write(CursBytes, 0, CursBytes.Length);
-            newStream.Close();
-            #endregion
+                UTF8Encoding encoding = new UTF8Encoding();
+                byte[] CursBytes = encoding.GetBytes(message);
+                Stream newStream = CursRequest.GetRequestStream();
+                newStream.Write(CursBytes, 0, CursBytes.Length);
+                newStream.Close();
+                #endregion
 
-            HttpWebResponse response;
+                HttpWebResponse response;
 
-            #region get response
-            response = (HttpWebResponse)CursRequest.GetResponse();
-            StreamReader reader = new StreamReader(response.GetResponseStream());
-            XmlDocument document = new XmlDocument();
-            document.LoadXml(reader.ReadToEnd());
-            return document;
-            #endregion
+                #region get response
+
+                response = (HttpWebResponse)CursRequest.GetResponse();
+                StreamReader reader = new StreamReader(response.GetResponseStream());
+                XmlDocument document = new XmlDocument();
+                document.LoadXml(reader.ReadToEnd());
+                return document;
+                #endregion
+            }
+            catch (WebException e)
+            {
+                Console.WriteLine("Ошибка соединения. Описание:");
+                Console.WriteLine(e.Message);
+                Console.WriteLine("Убедитесь что у Вас включен LocalProxy");
+                Console.WriteLine("Press any key to quit");
+                Console.ReadKey();
+                return null;
+            }
+            
         }
 
-        private static List<Currency> ExtractCurrencies(XmlDocument document)
+        private static List<Currency> ExtractCurrencies()
         {
+            StringBuilder cursOnDateSoap = GenerateCursOnDateSoap();
+            XmlDocument document = GetDocument(cursOnDateSoap.ToString());
+            if (document == null) return null;
             List<Currency> currencies = new List<Currency>();
             XmlNode rs = document.ChildNodes[1].FirstChild.FirstChild.FirstChild.FirstChild;
             foreach (XmlNode node in rs.ChildNodes)
@@ -197,8 +211,11 @@ namespace CBR_Parser
             return currencies;
         }
 
-        private static List<MetalCurs> ExtractMetalCurs(XmlDocument document)
+        private static List<MetalCurs> ExtractMetalCurs()
         {
+            StringBuilder MetalSoap = GenerateMetalSoap();
+            XmlDocument document = GetDocument(MetalSoap.ToString());
+            if (document == null) return null;
             List<MetalCurs> metals = new List<MetalCurs>();
             XmlNode rs = document.ChildNodes[1].FirstChild.FirstChild.FirstChild.FirstChild;
             foreach (XmlNode node in rs.ChildNodes)
@@ -225,8 +242,11 @@ namespace CBR_Parser
             return metals;
         }
 
-        private static List<ReuterCurrency> ExtractReutersCurs(XmlDocument document)
+        private static List<ReuterCurrency> ExtractReutersCurs()
         {
+            StringBuilder ReutersSoap = GenerateReutersSoap();
+            XmlDocument document = GetDocument(ReutersSoap.ToString());
+            if (document == null) return null;
             List<ReuterCurrency> reuterCurrencies = new List<ReuterCurrency>();
             XmlNode rs = document.ChildNodes[1].FirstChild.FirstChild.FirstChild.FirstChild;
             foreach (XmlNode node in rs.ChildNodes)
